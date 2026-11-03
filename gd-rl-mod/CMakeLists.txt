@@ -16,6 +16,6 @@ endif()
 
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
+target_link_libraries(${PROJECT_NAME} ws2_32)
 
 setup_geode_mod(${PROJECT_NAME})
