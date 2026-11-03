@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-geode-mod:
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -21,11 +21,31 @@ jobs:
           sdk: given
           target: Win64
           build-config: Release
-          use-lto: false
+          path: gd-rl-mod
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FidgetModMenu-Windows
+          name: GDRLBridge-Geode
           path: ${{ steps.build.outputs.build-output }}
           if-no-files-found: error
+
+  build-rust-client:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust client
+        working-directory: rust-client
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GDRLBridge-Rust
+          path: rust-client/target/release/gd-rl-client.exe
+          if-no-files-found: warn
