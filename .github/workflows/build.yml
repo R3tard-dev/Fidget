@@ -21,6 +21,7 @@ jobs:
           sdk: given
           target: Win64
           build-config: Release
+          use-lto: false
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
