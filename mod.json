@@ -1,0 +1,12 @@
+{
+	"geode": "v6.0.0-alpha.1",
+	"gd": {
+		"win": "2.2091"
+	},
+	"id": "play451.fidget",
+	"name": "Fidget",
+	"version": "v1.0.0",
+	"developer": "play451",
+	"description": "A Geometry Dash mod menu.",
+	"early-load": true
+}
