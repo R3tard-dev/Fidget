@@ -63,4 +63,6 @@ jobs:
           path: |
             target/release/gd-trainer.exe
             target/release/dummy_client.exe
+            target/release/bench.exe
+            target/release/launch.exe
 

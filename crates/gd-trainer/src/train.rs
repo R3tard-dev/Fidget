@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use gd_env::{Env, GdEnv, GdEnvConfig, MockEnv, StepResult, VecEnv};
@@ -25,7 +25,9 @@ gd-trainer [options]
   --max-steps N          episode step cap                                 [4000]
   --progress-scale X --death-penalty X --success-bonus X
   --threads N            CPU threads for burn (leave cores for the games) [2]
-  --seed N  --save-every N  --ckpt-dir DIR  --csv FILE  --resume";
+  --seed N  --save-every N  --ckpt-dir DIR  --csv FILE  --resume
+  --wait SECS            wait up to SECS for each game instance to appear  [120]
+  --eval N               play N greedy episodes from the level start using model_latest, then exit";
 
 #[derive(Debug, Clone)]
 pub struct Args {
@@ -57,6 +59,8 @@ pub struct Args {
     pub ckpt_dir: String,
     pub csv: String,
     pub resume: bool,
+    pub wait: u64,
+    pub eval: u64,
 }
 
 impl Default for Args {
@@ -90,6 +94,8 @@ impl Default for Args {
             ckpt_dir: "checkpoints".into(),
             csv: "train_log.csv".into(),
             resume: false,
+            wait: 120,
+            eval: 0,
         }
     }
 }
@@ -135,6 +141,8 @@ impl Args {
             ckpt_dir: get(&argv, "--ckpt-dir", d.ckpt_dir.clone()),
             csv: get(&argv, "--csv", d.csv.clone()),
             resume: has(&argv, "--resume"),
+            wait: get(&argv, "--wait", d.wait),
+            eval: get(&argv, "--eval", d.eval),
         }
     }
 }
@@ -149,7 +157,7 @@ pub struct TrainSummary {
 
 const MOCK_LEN: usize = 24;
 
-fn build_envs(args: &Args) -> Result<(Vec<Box<dyn Env + Send>>, Vec<f32>, usize)> {
+pub(crate) fn build_envs(args: &Args) -> Result<(Vec<Box<dyn Env + Send>>, Vec<f32>, usize)> {
     let mut envs: Vec<Box<dyn Env + Send>> = Vec::new();
     if args.mock {
         for _ in 0..args.envs {
@@ -169,8 +177,11 @@ fn build_envs(args: &Args) -> Result<(Vec<Box<dyn Env + Send>>, Vec<f32>, usize)
     let mut xs: Vec<f32> = Vec::new();
     for i in 0..args.envs {
         let port = args.base_port + i as u16;
-        let mut e = GdEnv::connect(port, cfg.clone()).with_context(|| format!("env {i} on port {port}"))?;
+        let mut e = GdEnv::connect_retry(port, cfg.clone(), Duration::from_secs(args.wait)).with_context(|| format!("env {i} on port {port}"))?;
         let xi = e.snapshot_xs()?;
+        if i > 0 {
+            crate::extra::check_snapshots(i, &xs, &xi)?;
+        }
         if i == 0 {
             xs = xi;
         } else if xi.len() != xs.len() {

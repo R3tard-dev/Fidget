@@ -4,6 +4,9 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     let args = gd_trainer::train::Args::from_env();
+    if args.eval > 0 {
+        return gd_trainer::extra::eval(&args);
+    }
     let s = gd_trainer::train::run(&args)?;
     println!(
         "done: {} iterations, stage {}/{}, curriculum {}",

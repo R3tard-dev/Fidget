@@ -1,5 +1,5 @@
 //! The real environment: reward shaping and observation normalisation on top of the socket.
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
 use gd_protocol::{err_name, Header, Request, NUM_OBJ, OBJ_FEATS, OBS_DIM, PLAYER_FEATS};
@@ -177,5 +177,29 @@ mod tests {
         let mut out = [0f32; PROC_OBS_DIM];
         process_obs(&raw, 0.0, &mut out);
         assert_eq!(&out[8..13], &[0.0, 0.5, -0.2, 1.0, 1.0]);
+    }
+}
+
+impl GdEnv {
+    /// Keeps retrying until the game instance is listening (it only starts the server after
+    /// the level has loaded and the reference replay has finished).
+    pub fn connect_retry(port: u16, cfg: GdEnvConfig, wait: Duration) -> Result<Self> {
+        let start = Instant::now();
+        let mut last_print: Option<Instant> = None;
+        loop {
+            match Self::connect(port, cfg.clone()) {
+                Ok(e) => return Ok(e),
+                Err(err) => {
+                    if start.elapsed() >= wait {
+                        return Err(err.context(format!("gave up on port {port} after {}s", wait.as_secs())));
+                    }
+                    if last_print.map_or(true, |t| t.elapsed() >= Duration::from_secs(5)) {
+                        eprintln!("waiting for the game on port {port}: {err:#}");
+                        last_print = Some(Instant::now());
+                    }
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+            }
+        }
     }
 }

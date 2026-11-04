@@ -1,7 +1,7 @@
 {
   "geode": "6.0.0-alpha.1",
   "gd": { "win": "2.2091" },
-  "version": "v0.4.0",
+  "version": "v0.5.0",
   "id": "yourname.gd-rl-env",
   "name": "GD RL Env",
   "developer": "yourname",
@@ -15,9 +15,15 @@
     },
     "record-first": {
       "type": "bool",
-      "name": "Record reference run first",
-      "description": "With RL mode on: play the level yourself first; snapshots are captured along the way and the RL server starts when you complete it.",
+      "name": "Record reference run",
+      "description": "Play the level yourself (Space/Up/Click) at fixed 240 TPS; the run is saved to gdrl_reference.bin. Turn OFF afterwards.",
       "default": false
+    },
+    "use-replay": {
+      "type": "bool",
+      "name": "Rebuild snapshots from the reference file",
+      "description": "On level entry, replay gdrl_reference.bin to rebuild the snapshots, then start the server.",
+      "default": true
     },
     "snapshot-spacing": {
       "type": "float",
@@ -27,10 +33,24 @@
       "min": 10.0,
       "max": 1000.0
     },
+    "hide-render": {
+      "type": "bool",
+      "name": "Hide level rendering (faster)",
+      "description": "Hides the level layer while replaying/serving. Turn off to watch the agent.",
+      "default": true
+    },
+    "frame-budget-ms": {
+      "type": "int",
+      "name": "Max ms of stepping per rendered frame",
+      "description": "Higher = more throughput but a less responsive window.",
+      "default": 12,
+      "min": 1,
+      "max": 100
+    },
     "port": {
       "type": "int",
       "name": "TCP port",
-      "description": "Localhost port the trainer connects to.",
+      "description": "Localhost port. Overridden by the GDRL_PORT environment variable (set by the launcher).",
       "default": 47000,
       "min": 1024,
       "max": 65535
@@ -38,7 +58,7 @@
     "dt-scale": {
       "type": "float",
       "name": "Tick dt scale",
-      "description": "Multiplier on the 1/240 s per-tick dt. Tweak only if the dummy client shows skipped/doubled ticks.",
+      "description": "Multiplier on 1/240 s per tick. Must match between recording and replay.",
       "default": 1.0,
       "min": 0.5,
       "max": 2.0
