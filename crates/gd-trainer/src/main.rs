@@ -1,5 +1,13 @@
 fn main() -> anyhow::Result<()> {
-    println!("protocol v{}, base port {}", gd_protocol::PROTOCOL_VERSION, gd_protocol::BASE_PORT);
-    gd_ppo::burn_smoke_test();
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        println!("{}", gd_trainer::train::USAGE);
+        return Ok(());
+    }
+    let args = gd_trainer::train::Args::from_env();
+    let s = gd_trainer::train::run(&args)?;
+    println!(
+        "done: {} iterations, stage {}/{}, curriculum {}",
+        s.iterations, s.frontier + 1, s.stages, if s.finished { "COMPLETE" } else { "not finished" }
+    );
     Ok(())
 }

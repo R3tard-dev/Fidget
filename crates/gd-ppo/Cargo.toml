@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 burn.workspace = true
 rand.workspace = true
+anyhow.workspace = true

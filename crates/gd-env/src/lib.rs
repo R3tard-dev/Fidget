@@ -1,5 +1,12 @@
 pub mod conn;
+pub mod game;
+pub mod mock;
+pub mod vec_env;
+
 pub use conn::Connection;
+pub use game::{process_obs, GdEnv, GdEnvConfig, PROC_OBS_DIM};
+pub use mock::MockEnv;
+pub use vec_env::VecEnv;
 
 use anyhow::Result;
 

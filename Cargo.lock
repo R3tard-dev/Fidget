@@ -1722,6 +1722,7 @@ dependencies = [
 name = "gd-ppo"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "burn",
  "rand 0.9.5",
 ]

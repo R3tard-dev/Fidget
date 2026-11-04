@@ -3,3 +3,6 @@
 *.csv
 *.ckpt
 a.sh
+
+/checkpoints
+*.mpk
