@@ -1,9 +1,25 @@
 {
   "geode": "6.0.0-alpha.1",
   "gd": { "win": "2.2091" },
-  "version": "v0.1.0",
+  "version": "v0.2.0",
   "id": "yourname.gd-rl-env",
   "name": "GD RL Env",
   "developer": "yourname",
-  "description": "Exposes Geometry Dash as a gym-style RL environment over TCP."
+  "description": "Exposes Geometry Dash as a gym-style RL environment over TCP.",
+  "settings": {
+    "rl-enabled": {
+      "type": "bool",
+      "name": "RL stepping mode",
+      "description": "Replace the game's timing with manual one-tick stepping (debug run).",
+      "default": false
+    },
+    "debug-ticks": {
+      "type": "int",
+      "name": "Debug run length (ticks)",
+      "description": "How many ticks the debug run steps before printing a summary.",
+      "default": 600,
+      "min": 1,
+      "max": 100000
+    }
+  }
 }
