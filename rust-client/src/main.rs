@@ -77,10 +77,7 @@ impl Gym for GDGameEnv {
     type ObservationSpace = BoxSpace<2>;
     type ActionSpace = Discrete;
 
-    fn step(
-        &mut self,
-        action: Tensor<1, Int>,
-    ) -> Result<StepInfo, Self::Error> {
+    fn step(&mut self, action: Tensor<1, Int>) -> Result<StepInfo, Self::Error> {
         let action_val: i64 = action.into_scalar::<i64>().unwrap_or(0);
         let cmd = if action_val == 1 { "JUMP" } else { "RELEASE" };
         let _ = writeln!(self.writer, "{}", cmd);
@@ -147,7 +144,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let observation_space = env.observation_space();
     let observation_size = observation_space.shape()[0];
 
-    // Build Q-networks using modurl MLP
     let online_q_network = MLP::builder()
         .input_size(observation_size)
         .output_size(2)
@@ -156,14 +152,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .expect("failed to build online Q-network");
 
-    let target_q_network = MLP::builder()
-        .input_size(observation_size)
-        .output_size(2)
-        .options((&device, DTYPE))
-        .hidden_layer_sizes(vec![64, 64])
-        .build()
-        .expect("failed to build target Q-network");
-
     let optimizer = AdamWConfig::new().init();
 
     let mut agent = DQNAgent::builder()
@@ -171,7 +159,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .action_space(env.action_space())
         .observation_space(observation_space)
         .online_q_network(online_q_network)
-        .target_q_network(target_q_network)
         .optimizer(optimizer)
         .learning_rate(2.5e-4)
         .replay_capacity(10_000)
