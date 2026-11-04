@@ -1,0 +1,5 @@
+/target
+/build
+*.csv
+*.ckpt
+a.sh

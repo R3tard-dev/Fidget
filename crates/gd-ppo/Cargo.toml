@@ -1,0 +1,8 @@
+[package]
+name = "gd-ppo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+burn.workspace = true
+rand.workspace = true

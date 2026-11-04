@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/gd-protocol", "crates/gd-env", "crates/gd-ppo", "crates/gd-trainer"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+burn = { version = "0.19", default-features = false, features = ["std", "ndarray", "autodiff"] }
+anyhow = "1"
+rand = "0.9"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1

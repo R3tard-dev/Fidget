@@ -1,0 +1,10 @@
+[package]
+name = "gd-trainer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gd-protocol = { path = "../gd-protocol" }
+gd-env = { path = "../gd-env" }
+gd-ppo = { path = "../gd-ppo" }

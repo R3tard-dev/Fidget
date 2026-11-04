@@ -1,0 +1,9 @@
+{
+  "geode": "6.0.0-alpha.1",
+  "gd": { "win": "2.2091" },
+  "version": "v0.1.0",
+  "id": "yourname.gd-rl-env",
+  "name": "GD RL Env",
+  "developer": "yourname",
+  "description": "Exposes Geometry Dash as a gym-style RL environment over TCP."
+}

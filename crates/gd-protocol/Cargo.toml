@@ -1,0 +1,4 @@
+[package]
+name = "gd-protocol"
+version.workspace = true
+edition.workspace = true
