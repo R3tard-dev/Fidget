@@ -87,11 +87,11 @@ impl Gym for GDGameEnv {
 
         let dx = state.x - self.prev_x;
         let reward = if state.dead {
-            -10.0
+            -10.0f32
         } else if dx > 0.0 {
-            (dx * 0.01) as f64
+            (dx * 0.01) as f32
         } else {
-            0.0
+            0.0f32
         };
         self.prev_x = if state.dead { 0.0 } else { state.x };
         let done = state.dead;
