@@ -1,3 +1,6 @@
+pub mod conn;
+pub use conn::Connection;
+
 use anyhow::Result;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -7,6 +10,7 @@ pub struct StepResult {
     pub success: bool,
 }
 
+/// Observations are written into a caller-owned buffer, so the rollout loop never allocates.
 pub trait Env {
     fn obs_dim(&self) -> usize;
     fn reset(&mut self, start_x: f32, obs: &mut [f32]) -> Result<()>;

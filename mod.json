@@ -1,7 +1,7 @@
 {
   "geode": "6.0.0-alpha.1",
   "gd": { "win": "2.2091" },
-  "version": "v0.2.0",
+  "version": "v0.3.0",
   "id": "yourname.gd-rl-env",
   "name": "GD RL Env",
   "developer": "yourname",
@@ -9,17 +9,25 @@
   "settings": {
     "rl-enabled": {
       "type": "bool",
-      "name": "RL stepping mode",
-      "description": "Replace the game's timing with manual one-tick stepping (debug run).",
+      "name": "RL mode",
+      "description": "Freeze the game and step it only on commands from the trainer. Set BEFORE entering a level.",
       "default": false
     },
-    "debug-ticks": {
+    "port": {
       "type": "int",
-      "name": "Debug run length (ticks)",
-      "description": "How many ticks the debug run steps before printing a summary.",
-      "default": 600,
-      "min": 1,
-      "max": 100000
+      "name": "TCP port",
+      "description": "Localhost port the trainer connects to.",
+      "default": 47000,
+      "min": 1024,
+      "max": 65535
+    },
+    "dt-scale": {
+      "type": "float",
+      "name": "Tick dt scale",
+      "description": "Multiplier on the 1/240 s per-tick dt. Tweak only if the dummy client shows skipped/doubled ticks.",
+      "default": 1.0,
+      "min": 0.5,
+      "max": 2.0
     }
   }
 }

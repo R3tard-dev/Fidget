@@ -1738,6 +1738,7 @@ dependencies = [
  "gd-env",
  "gd-ppo",
  "gd-protocol",
+ "rand 0.9.5",
 ]
 
 [[package]]

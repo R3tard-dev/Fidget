@@ -60,5 +60,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: gd-trainer-windows
-          path: target/release/gd-trainer.exe
+          path: |
+            target/release/gd-trainer.exe
+            target/release/dummy_client.exe
 
