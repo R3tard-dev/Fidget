@@ -19,3 +19,7 @@ add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 setup_geode_mod(${PROJECT_NAME})
 
 # Winsock is added in step 3 (plain target_link_libraries signature, to match Geode's).
+
+# Geode's PCH already includes windows.h (and therefore the old winsock.h), which
+# clashes with winsock2.h. server.cpp opts out of the PCH so it can include winsock2.h first.
+set_source_files_properties(src/server.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
