@@ -20,9 +20,9 @@ constexpr size_t kReqLen = 12;
 constexpr size_t kHeaderLen = 20;
 constexpr size_t kRespLen = kHeaderLen + kObsDim * sizeof(float); // 372
 
-enum Cmd : uint8_t { Hello = 0, Reset = 1, Step = 2, Close = 3 };
+enum Cmd : uint8_t { Hello = 0, Reset = 1, Step = 2, Close = 3, Info = 4 };
 enum Flag : uint8_t { FlagDone = 1, FlagSuccess = 2, FlagDead = 4 };
-enum Err : uint16_t { ErrNone = 0, ErrVersion = 1, ErrBusy = 2, ErrNoPlayer = 3, ErrBadCmd = 4 };
+enum Err : uint16_t { ErrNone = 0, ErrVersion = 1, ErrBusy = 2, ErrNoPlayer = 3, ErrBadCmd = 4, ErrNoSnapshots = 5 };
 
 struct Request {
     uint8_t cmd = 0, action = 0, skip = 1;

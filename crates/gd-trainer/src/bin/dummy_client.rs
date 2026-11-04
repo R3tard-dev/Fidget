@@ -1,5 +1,7 @@
-//! Random-click client: checks protocol, tick consistency and raw step throughput.
-//! Usage: dummy_client [--port 47000] [--steps 2000] [--skip 1]
+//! Usage:
+//!   dummy_client [--port 47000] [--steps 2000] [--skip 1] [--random-start]   random clicks + throughput
+//!   dummy_client --restore-test                                               reset to several start_x
+//!   dummy_client --determinism [--ticks 120]                                  restore fidelity: run twice, compare
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
@@ -12,10 +14,11 @@ const PLAYER_NAMES: [&str; PLAYER_FEATS] = ["x", "y", "vy", "mode", "speed", "gr
 
 fn arg<T: std::str::FromStr>(name: &str, default: T) -> T {
     let args: Vec<String> = std::env::args().collect();
-    args.windows(2)
-        .find(|w| w[0] == name)
-        .and_then(|w| w[1].parse().ok())
-        .unwrap_or(default)
+    args.windows(2).find(|w| w[0] == name).and_then(|w| w[1].parse().ok()).unwrap_or(default)
+}
+
+fn flag(name: &str) -> bool {
+    std::env::args().any(|a| a == name)
 }
 
 fn check(h: &Header) -> Result<()> {
@@ -37,10 +40,119 @@ fn print_obs(obs: &[f32; OBS_DIM]) {
     }
 }
 
+struct Info {
+    spacing: f32,
+    xs: Vec<f32>,
+}
+
+fn fetch_info(conn: &mut Connection, obs: &mut [f32; OBS_DIM]) -> Result<Info> {
+    let h = conn.call(&Request::info(0), obs)?;
+    check(&h)?;
+    let count = h.tick as usize;
+    let spacing = h.dx;
+    let mut xs = Vec::with_capacity(count);
+    for page in 0..count.div_ceil(OBS_DIM) {
+        if page > 0 {
+            let h = conn.call(&Request::info(page as u32), obs)?;
+            check(&h)?;
+        }
+        let n = (count - page * OBS_DIM).min(OBS_DIM);
+        xs.extend_from_slice(&obs[..n]);
+    }
+    Ok(Info { spacing, xs })
+}
+
+fn sample_points(info: &Info, n: usize) -> Vec<f32> {
+    if info.xs.is_empty() {
+        return vec![0.0];
+    }
+    (0..n).map(|i| info.xs[(i * (info.xs.len() - 1)) / (n - 1).max(1)]).collect()
+}
+
+fn restore_test(conn: &mut Connection, obs: &mut [f32; OBS_DIM], info: &Info) -> Result<()> {
+    for sx in sample_points(info, 8) {
+        let h = conn.call(&Request::reset(sx), obs)?;
+        check(&h)?;
+        let off = (obs[0] - sx).abs();
+        println!(
+            "requested x={sx:.1} -> restored x={:.3} (off by {off:.3}{}) y={:.3} vy={:.3} mode={} speed={} grav={} ground={}",
+            obs[0], if off > 1.0 { " <-- MISMATCH" } else { "" }, obs[1], obs[2], obs[3], obs[4], obs[5], obs[6]
+        );
+        let mut dxs = [0f32; 3];
+        for d in dxs.iter_mut() {
+            let h = conn.call(&Request::step(false, 1), obs)?;
+            check(&h)?;
+            *d = h.dx;
+            if h.done() {
+                break;
+            }
+        }
+        println!("    first 3 step dx: {dxs:?}");
+    }
+    Ok(())
+}
+
+fn run_script(
+    conn: &mut Connection,
+    obs: &mut [f32; OBS_DIM],
+    start_x: f32,
+    ticks: u32,
+    seed: u32,
+) -> Result<([f32; OBS_DIM], u32, bool)> {
+    let h = conn.call(&Request::reset(start_x), obs)?;
+    check(&h)?;
+    let mut rng = seed;
+    let mut click = false;
+    let mut ended_at = ticks;
+    let mut dead = false;
+    for t in 0..ticks {
+        rng = rng.wrapping_mul(1664525).wrapping_add(1013904223);
+        if (rng >> 24) < 8 {
+            click = !click; // ~3% toggle chance per tick
+        }
+        let h = conn.call(&Request::step(click, 1), obs)?;
+        check(&h)?;
+        if h.done() {
+            ended_at = t + 1;
+            dead = h.dead();
+            break;
+        }
+    }
+    Ok((*obs, ended_at, dead))
+}
+
+fn determinism(conn: &mut Connection, obs: &mut [f32; OBS_DIM], info: &Info, ticks: u32) -> Result<()> {
+    if info.xs.is_empty() {
+        bail!("no snapshots; record a reference run first (record-first setting)");
+    }
+    let mut fails = 0;
+    let pts = sample_points(info, 6);
+    for (i, &sx) in pts.iter().enumerate() {
+        let seed = 12345 + i as u32;
+        let (a, na, da) = run_script(conn, obs, sx, ticks, seed)?;
+        let (b, nb, db) = run_script(conn, obs, sx, ticks, seed)?;
+        if a == b && na == nb && da == db {
+            println!("PASS  x={sx:.1}: {na} ticks, end x={:.3} y={:.3} dead={da}", a[0], a[1]);
+        } else {
+            fails += 1;
+            let idx = a.iter().zip(b.iter()).position(|(p, q)| p != q);
+            println!(
+                "FAIL  x={sx:.1}: ticks {na}/{nb} dead {da}/{db}, first differing obs idx {idx:?} ({:?} vs {:?})",
+                idx.map(|k| a[k]),
+                idx.map(|k| b[k])
+            );
+        }
+    }
+    println!("determinism: {} / {} passed", pts.len() - fails, pts.len());
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let port: u16 = arg("--port", BASE_PORT);
     let steps: u64 = arg("--steps", 2000);
     let skip: u8 = arg("--skip", 1);
+    let ticks: u32 = arg("--ticks", 120);
+    let random_start = flag("--random-start");
 
     let mut conn = Connection::connect(port, Duration::from_secs(15))?;
     let mut obs = [0f32; OBS_DIM];
@@ -49,12 +161,41 @@ fn main() -> Result<()> {
     check(&h)?;
     println!("connected: mod protocol v{} (client v{PROTOCOL_VERSION}), obs_dim {}", h.version, h.obs_dim);
 
-    let h = conn.call(&Request::reset(0.0), &mut obs)?;
+    let info = fetch_info(&mut conn, &mut obs)?;
+    if info.xs.is_empty() {
+        println!("snapshots: none (reset(start_x > 0) will report an error)");
+    } else {
+        println!(
+            "snapshots: {} (spacing {:.0}), x from {:.1} to {:.1}",
+            info.xs.len(), info.spacing, info.xs[0], info.xs[info.xs.len() - 1]
+        );
+    }
+
+    if flag("--restore-test") {
+        restore_test(&mut conn, &mut obs, &info)?;
+        conn.call(&Request::close(), &mut obs)?;
+        return Ok(());
+    }
+    if flag("--determinism") {
+        determinism(&mut conn, &mut obs, &info, ticks)?;
+        conn.call(&Request::close(), &mut obs)?;
+        return Ok(());
+    }
+
+    let mut rng = rand::rng();
+    let start = |rng: &mut rand::rngs::ThreadRng| -> f32 {
+        if random_start && !info.xs.is_empty() {
+            info.xs[rng.random_range(0..info.xs.len())]
+        } else {
+            0.0
+        }
+    };
+
+    let h = conn.call(&Request::reset(start(&mut rng)), &mut obs)?;
     check(&h)?;
     println!("after reset (tick {}):", h.tick);
     print_obs(&obs);
 
-    let mut rng = rand::rng();
     let mut click = false;
     let mut hist: BTreeMap<i32, u32> = BTreeMap::new();
     let (mut episodes, mut ep_steps, mut best_x) = (0u32, 0u32, 0f32);
@@ -83,13 +224,16 @@ fn main() -> Result<()> {
             episodes += 1;
             println!("episode {episodes} over: {ep_steps} steps, x={:.1}, success={}", obs[0], h.success());
             ep_steps = 0;
-            let h = conn.call(&Request::reset(0.0), &mut obs)?;
+            let h = conn.call(&Request::reset(start(&mut rng)), &mut obs)?;
             check(&h)?;
         }
     }
 
     let secs = t0.elapsed().as_secs_f64();
-    println!("\n{steps} steps (skip {skip}) in {secs:.2}s = {:.0} steps/s, {:.0} ticks/s", steps as f64 / secs, steps as f64 * skip as f64 / secs);
+    println!(
+        "\n{steps} steps (skip {skip}) in {secs:.2}s = {:.0} steps/s, {:.0} ticks/s",
+        steps as f64 / secs, steps as f64 * skip as f64 / secs
+    );
     println!("episodes: {episodes}, best x: {best_x:.1}");
 
     if !hist.is_empty() {

@@ -35,6 +35,7 @@ pub fn err_name(code: u16) -> &'static str {
         2 => "game busy / not inside a level (request timed out)",
         3 => "no player object",
         4 => "bad command",
+        5 => "no snapshots recorded (start_x > 0 needs a reference run)",
         _ => "unknown",
     }
 }
@@ -189,3 +190,6 @@ mod tests {
         assert!(matches!(decode_response(&buf, &mut obs), Err(ProtocolError::BadMagic(0))));
     }
 }
+
+mod ext;
+pub use ext::*;

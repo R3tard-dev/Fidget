@@ -2,6 +2,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <vector>
 #include "protocol.hpp"
 #include "server.hpp"
@@ -11,10 +12,12 @@ using namespace geode::prelude;
 namespace {
 
 constexpr float kTickDt = 1.0f / 240.0f; // VERIFY for 2.2091 (use dt-scale to compensate)
-constexpr float kLookBehind = 30.0f;     // include objects slightly behind the player
+constexpr float kLookBehind = 30.0f;
 bool g_clickHeld = false;
 
-bool rlEnabled() { return Mod::get()->getSettingValue<bool>("rl-enabled"); }
+bool rlEnabled()   { return Mod::get()->getSettingValue<bool>("rl-enabled"); }
+bool recordFirst() { return Mod::get()->getSettingValue<bool>("record-first"); }
+float spacing()    { return static_cast<float>(Mod::get()->getSettingValue<double>("snapshot-spacing")); }
 
 int gamemodeId(PlayerObject* p) {
     if (p->m_isShip)   return 1;
@@ -30,10 +33,11 @@ int gamemodeId(PlayerObject* p) {
 void setClick(GJBaseGameLayer* gl, bool held) {
     if (held == g_clickHeld) return;
     g_clickHeld = held;
-    gl->handleButton(held, 1, true); // compiled in step 2
+    gl->handleButton(held, 1, true);
 }
 
 struct ObjInfo { float x, y, w, h, type; };
+struct Snap { int bucket; float x; Ref<CheckpointObject> cp; };
 
 } // namespace
 
@@ -41,10 +45,67 @@ class $modify(RLPlayLayer, PlayLayer) {
     struct Fields {
         bool completed = false;
         bool objsBuilt = false;
+        bool recordDone = false;
         uint32_t tick = 0;
-        std::vector<ObjInfo> objs; // non-decoration objects sorted by x
+        std::vector<ObjInfo> objs;  // non-decoration objects sorted by x
+        std::vector<Snap> snaps;    // sorted by x, strictly along the final successful path
     };
 
+    bool serverPhase() { return rlEnabled() && (!recordFirst() || m_fields->recordDone); }
+
+    // ---- reference-run recording (human plays at normal speed) ----
+    void recordTick() {
+        auto* p = m_player1;
+        if (!p || p->m_isDead || m_fields->completed) return;
+        float x = p->getPositionX();
+        auto& s = m_fields->snaps;
+
+        // Anything captured further along than where we are now belongs to an abandoned attempt.
+        while (!s.empty() && s.back().x > x) s.pop_back();
+
+        int b = static_cast<int>(x / spacing());
+        if (!s.empty() && s.back().bucket >= b) return;
+
+        // VERIFY: signature. Fallback: this->markCheckpoint(); take m_checkpointArray->lastObject().
+        CheckpointObject* cp = this->createCheckpoint();
+        if (!cp) return;
+        s.push_back(Snap{b, x, Ref<CheckpointObject>(cp)});
+    }
+
+    void finishRecording() {
+        m_fields->recordDone = true;
+        auto& s = m_fields->snaps;
+        float first = s.empty() ? 0.f : s.front().x;
+        float last  = s.empty() ? 0.f : s.back().x;
+        log::info("[gdrl] reference run complete: {} snapshots, x {:.1f} .. {:.1f}, spacing {:.0f}",
+                  s.size(), first, last, spacing());
+        auto msg = fmt::format("Recorded {} snapshots (x {:.0f} to {:.0f}).\nRL server is now listening: start the trainer.",
+                               s.size(), first, last);
+        FLAlertLayer::create("GD RL", msg.c_str(), "OK")->show();
+    }
+
+    // ---- restore ----
+    void restoreStart(float startX, uint16_t& err) {
+        auto& s = m_fields->snaps;
+        if (m_checkpointArray) m_checkpointArray->removeAllObjects();
+
+        if (startX > 0.f && !s.empty()) {
+            auto it = std::upper_bound(s.begin(), s.end(), startX,
+                [](float v, const Snap& sn) { return v < sn.x; });
+            size_t i = (it == s.begin()) ? 0 : static_cast<size_t>(it - s.begin()) - 1;
+
+            // The game's own reset path loads the last checkpoint when practice mode is on.
+            if (!m_isPracticeMode) this->togglePracticeMode(true); // VERIFY name/side effects
+            m_checkpointArray->addObject(s[i].cp.data());
+        } else if (startX > 0.f) {
+            err = rl::ErrNoSnapshots; // fall through to a normal start
+        }
+
+        this->resetLevel();
+        if (m_checkpointArray) m_checkpointArray->removeAllObjects();
+    }
+
+    // ---- observation ----
     void buildObjectCache() {
         auto& v = m_fields->objs;
         v.clear();
@@ -75,7 +136,7 @@ class $modify(RLPlayLayer, PlayLayer) {
         obs[4] = p->m_playerSpeed;
         obs[5] = p->m_isUpsideDown ? -1.f : 1.f;
         obs[6] = p->m_isOnGround ? 1.f : 0.f;
-        obs[7] = 0.f; // reserved (size/mirror in step 4)
+        obs[7] = 0.f; // reserved (size/mirror)
 
         if (!m_fields->objsBuilt) buildObjectCache();
         auto& objs = m_fields->objs;
@@ -91,15 +152,24 @@ class $modify(RLPlayLayer, PlayLayer) {
             o[3] = it->w;
             o[4] = it->h;
         }
-        for (; n < rl::kNumObj; ++n, o += rl::kObjFeats) o[0] = -1.f; // empty slot
+        for (; n < rl::kNumObj; ++n, o += rl::kObjFeats) o[0] = -1.f;
     }
 
+    // ---- main hook ----
     void update(float dt) {
         if (!rlEnabled()) {
             PlayLayer::update(dt);
             return;
         }
 
+        // Phase 1: human reference run, normal game speed, snapshots captured after each frame.
+        if (recordFirst() && !m_fields->recordDone) {
+            PlayLayer::update(dt);
+            this->recordTick();
+            return;
+        }
+
+        // Phase 2: trainer-driven stepping.
         auto& srv = rl::Server::get();
         srv.ensureStarted(static_cast<uint16_t>(Mod::get()->getSettingValue<int64_t>("port")));
         if (!srv.connected() || !m_player1) return; // frozen until a client connects
@@ -117,7 +187,7 @@ class $modify(RLPlayLayer, PlayLayer) {
                     if (r.aux != rl::kProtocolVersion) err = rl::ErrVersion;
                     break;
                 case rl::Reset:
-                    this->resetLevel(); // step 4: honor r.startX via snapshots
+                    this->restoreStart(r.startX, err);
                     m_fields->completed = false;
                     m_fields->tick = 0;
                     g_clickHeld = true;          // force an actual release below
@@ -131,13 +201,13 @@ class $modify(RLPlayLayer, PlayLayer) {
                     float x0 = p->getPositionX();
                     for (int i = 0; i < skip; ++i) {
                         if (p->m_isDead || m_fields->completed) break;
-                        // THE one-tick step (same call as step 2's debug run)
                         PlayLayer::update(tickDt);
                         ++m_fields->tick;
                     }
                     dx = p->getPositionX() - x0;
                     break;
                 }
+                case rl::Info:
                 case rl::Close:
                     break;
                 default:
@@ -157,23 +227,35 @@ class $modify(RLPlayLayer, PlayLayer) {
                 err = rl::ErrNoPlayer;
             }
 
+            uint32_t tickOut = m_fields->tick;
+            if (r.cmd == rl::Info) {
+                // obs[] = snapshot x values for page r.aux; tick = total count; dx = spacing
+                auto& s = m_fields->snaps;
+                size_t base = static_cast<size_t>(r.aux) * rl::kObsDim;
+                std::fill(obs, obs + rl::kObsDim, 0.f);
+                for (size_t i = 0; i < static_cast<size_t>(rl::kObsDim) && base + i < s.size(); ++i)
+                    obs[i] = s[base + i].x;
+                tickOut = static_cast<uint32_t>(s.size());
+                dx = spacing();
+            }
+
             uint8_t out[rl::kRespLen];
-            rl::encodeResponse(out, flags, r.cmd, err, m_fields->tick, dx, obs);
+            rl::encodeResponse(out, flags, r.cmd, err, tickOut, dx, obs);
             srv.respond(r.seq, out);
 
             if (std::chrono::steady_clock::now() - t0 > std::chrono::milliseconds(12)) break;
         }
     }
 
-    // Without these, GD auto-respawns ~1 s after death and leaves the level on completion,
-    // both on real time, which would corrupt episodes.
+    // Vanilla auto-respawn (~1 s after death) must only run when we are NOT the one resetting.
     void delayedResetLevel() {
-        if (rlEnabled()) return;
+        if (serverPhase()) return;
         PlayLayer::delayedResetLevel();
     }
 
     void levelComplete() {
-        if (rlEnabled()) { m_fields->completed = true; return; }
-        PlayLayer::levelComplete();
+        if (!rlEnabled()) { PlayLayer::levelComplete(); return; }
+        m_fields->completed = true;
+        if (!serverPhase()) this->finishRecording(); // human finished the reference run
     }
 };

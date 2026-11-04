@@ -1,7 +1,7 @@
 {
   "geode": "6.0.0-alpha.1",
   "gd": { "win": "2.2091" },
-  "version": "v0.3.0",
+  "version": "v0.4.0",
   "id": "yourname.gd-rl-env",
   "name": "GD RL Env",
   "developer": "yourname",
@@ -12,6 +12,20 @@
       "name": "RL mode",
       "description": "Freeze the game and step it only on commands from the trainer. Set BEFORE entering a level.",
       "default": false
+    },
+    "record-first": {
+      "type": "bool",
+      "name": "Record reference run first",
+      "description": "With RL mode on: play the level yourself first; snapshots are captured along the way and the RL server starts when you complete it.",
+      "default": false
+    },
+    "snapshot-spacing": {
+      "type": "float",
+      "name": "Snapshot spacing (units)",
+      "description": "Distance in x between snapshots. Smaller = finer curriculum stages but more memory.",
+      "default": 100.0,
+      "min": 10.0,
+      "max": 1000.0
     },
     "port": {
       "type": "int",
